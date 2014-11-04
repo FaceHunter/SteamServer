@@ -138,7 +138,13 @@ namespace SteamServer
                     Listener.Listen(Limit);
 
                     Log.Debug("Waiting for connection!");
-                    Listener.BeginAccept(new AsyncCallback(ConnectCallback), Listener);
+                    while (true)
+                    {
+                        MRE.Reset();
+                        Listener.BeginAccept(new AsyncCallback(ConnectCallback), Listener);
+                        MRE.WaitOne();
+                    }
+                    
                     
                 }
             }
@@ -297,7 +303,7 @@ namespace SteamServer
         {
             SteamClient Client = (SteamClient)result.AsyncState;
 
-            //Check for forced closes
+            //Check for force closes
             try
             {
                 Client.ClientSocket.EndReceive(result);
