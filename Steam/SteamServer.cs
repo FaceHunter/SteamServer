@@ -136,12 +136,10 @@ namespace SteamServer
                 {
                     Listener.Bind(Socket);
                     Listener.Listen(Limit);
-                    while (true)
-                    {
-                        MRE.Reset();
-                        Listener.BeginAccept(new AsyncCallback(ConnectCallback), Listener);
-                        MRE.WaitOne();
-                    }
+
+                    Log.Debug("Waiting for connection!");
+                    Listener.BeginAccept(new AsyncCallback(ConnectCallback), Listener);
+                    
                 }
             }
             catch (Exception e)
@@ -235,11 +233,11 @@ namespace SteamServer
         private static void ConnectCallback(IAsyncResult result)
         {
             SteamClient Client = new SteamClient();
-
+            
             try
             {
-                Client.ClientSocket = (Socket)result.AsyncState;
-                Client.ClientSocket = Client.ClientSocket.EndAccept(result);
+                Socket listener = (Socket)result.AsyncState;
+                Client.ClientSocket = listener.EndAccept(result);
 
                 Log.Info(String.Format("Client connected from {0}", Client.ClientSocket.RemoteEndPoint.ToString()));
 
@@ -250,10 +248,15 @@ namespace SteamServer
                 }
 
                 Client.ClientSocket.BeginReceive(Client.Buffer, 0, SteamClient.BufferSize, SocketFlags.None, new AsyncCallback(ReceiveCallback), Client);
+                
+                // Our Accept function ended, we can now Accept more clients yay!
+                listener.BeginAccept(new AsyncCallback(ConnectCallback), listener); 
             }
             catch (Exception e)
             {
+                Log.Error(e.GetType().Name);
                 Log.Error(e.Message);
+                Log.Error(e.StackTrace);
             }
         }
         private static void DisconnectCallback(IAsyncResult result)
@@ -294,23 +297,29 @@ namespace SteamServer
         {
             SteamClient Client = (SteamClient)result.AsyncState;
 
+            //Check for forced closes
             try
             {
-                if (Client.ClientSocket.EndReceive(result) == SteamClient.BufferSize)
-                {
-                    Client.ClientSocket.BeginReceive(Client.Buffer, 0, SteamClient.BufferSize, SocketFlags.None, new AsyncCallback(ReceiveCallback), Client);
-                }
-                else
-                {
-                    // Update the heartbeat.
-                    Client.LastPacket = DateTime.Now;
+                Client.ClientSocket.EndReceive(result);
+            }
+            catch(Exception e)
+            {
+                Log.Warning("Connection Error");
+                RemoveClient(Client.ClientID);
+                return;
+            }
 
-                    // We handle the packet and send a response here.
-                    ServiceRouter.HandlePacket(Client);
+            try
+            {
+                // Update the heartbeat.
+                Client.LastPacket = DateTime.Now;
 
-                    // Continue.
-                    Client.ClientSocket.BeginReceive(Client.Buffer, 0, SteamClient.BufferSize, SocketFlags.None, new AsyncCallback(ReceiveCallback), Client);
-                }
+                // We handle the packet and send a response here.
+                ServiceRouter.HandlePacket(Client);
+
+                // Continue.
+                Client.ClientSocket.BeginReceive(Client.Buffer, 0, SteamClient.BufferSize, SocketFlags.None, new AsyncCallback(ReceiveCallback), Client);
+                
             }
             catch (Exception e)
             {
@@ -358,6 +367,7 @@ namespace SteamServer
 
                         foreach (SteamClient Client in ToPurge)
                         {
+                            Log.Debug(String.Format("Purging client: {0}", Client.ClientID));
                             SteamServer.RemoveClient(Client.ClientID);
                         }
                         ToPurge.Clear();

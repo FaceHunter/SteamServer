@@ -96,7 +96,7 @@ namespace SteamServer
                 // Debug
                 SteamFriend NewFriend = new SteamFriend();
                 NewFriend.XUID = 0x1100001DEADC0DE;
-                NewFriend.Username = Encoding.ASCII.GetBytes("NotConvery");
+                NewFriend.Username = Encoding.ASCII.GetBytes("DummyFriend");
                 NewFriend.Status = PersonaState.Online;
                 FriendsList.Add(NewFriend);
             }
